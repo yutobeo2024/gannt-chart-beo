@@ -192,6 +192,35 @@
   .prj-row button.open{background:var(--bar);color:#fff;border:none}
   .prj-row button.del:hover{background:#fde2dc;border-color:#f3b8ab}
   .prj-row button:hover{filter:brightness(.97)}
+  /* ===== CẢM ỨNG: cho phép kéo-thả bằng ngón tay (không cuộn nhầm) ===== */
+  #splitter,.bar,.milestonebar,.bar .handle,.col-resize{touch-action:none}
+  /* ===== ĐIỆN THOẠI / MÀN NHỎ: thu gọn, GIỮ NGUYÊN desktop ===== */
+  @media (max-width:820px){
+    #toolbar{padding:4px 6px;gap:2px}
+    #toolbar .brand{font-size:13px;margin-right:4px}
+    #toolbar .brand svg{width:17px;height:17px}
+    .tb-group{padding:0 3px;border-left-color:transparent}
+    button.tbtn{padding:5px 7px;font-size:12px;gap:3px}
+    .tbtn svg{width:14px;height:14px}
+    .seg button{padding:5px 9px;font-size:12px}
+    .fdate{padding:4px 5px;font-size:11px;max-width:118px}
+    .projchip{padding:5px 8px;font-size:12px;max-width:160px}
+    #splitter{flex-basis:14px}
+    #splitter::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                     width:4px;height:42px;background:#fff;border-radius:3px;opacity:.7}
+    #grid{min-width:96px}
+    #gridBodyWrap::-webkit-scrollbar{height:8px}
+    #status{gap:9px;padding:5px 8px;font-size:11px}
+    .legend{gap:7px;margin-left:0;width:100%;flex-wrap:wrap}
+    .synbtn{padding:5px 9px}
+  }
+  /* màn rất hẹp (dọc): nhỏ thêm chút */
+  @media (max-width:480px){
+    button.tbtn{padding:5px 6px;font-size:11.5px}
+    button.tbtn svg{display:none}
+    #btnUp svg,#btnDown svg,#btnLink svg,#btnUnlink svg{display:inline}
+    #status span{white-space:nowrap}
+  }
 </style>
 </head>
 <body>
@@ -625,13 +654,13 @@ function renderTimeline(){
   vis.forEach((t,idx)=>{const e=effective(t);const y=idx*30;
     if(t.milestone){const x=diffDays(range.start,t.start)*dayW+dayW/2-7;
       const ms=document.createElement("div");ms.className="milestonebar";ms.style.left=x+"px";ms.style.top=(y+7)+"px";
-      ms.innerHTML=`<span class="lbl">${escapeHtml(t.name)}</span>`;ms.onmousedown=ev=>startDrag(ev,t,"move");attachTip(ms,t,e);canvas.appendChild(ms);
+      ms.innerHTML=`<span class="lbl">${escapeHtml(t.name)}</span>`;ms.onpointerdown=ev=>startDrag(ev,t,"move");attachTip(ms,t,e);canvas.appendChild(ms);
       pos[t.id]={y:y+14,sx:x+14,ex:x+14};return;}
     const x=diffDays(range.start,e.start)*dayW;const w=Math.max(e.dur*dayW-2,4);const sum=isSummary(t);
     const bar=document.createElement("div");bar.className="bar"+(sum?" summarybar":"")+(crit.has(t.id)?" crit":"");
     bar.style.left=x+"px";bar.style.top=(y+(sum?9:7))+"px";bar.style.width=w+"px";
     if(!sum){bar.innerHTML=`<div class="prog" style="width:${e.progress}%"></div><div class="handle l"></div><div class="handle r"></div><span class="tasklbl">${escapeHtml(t.name)}</span><span class="lbl">${e.progress}%</span>`;
-      bar.onmousedown=ev=>{if(ev.target.classList.contains("handle"))startDrag(ev,t,ev.target.classList.contains("r")?"resizeR":"resizeL");else startDrag(ev,t,"move");};}
+      bar.onpointerdown=ev=>{if(ev.target.classList.contains("handle"))startDrag(ev,t,ev.target.classList.contains("r")?"resizeR":"resizeL");else startDrag(ev,t,"move");};}
     else{bar.innerHTML=`<span class="sumlbl">${escapeHtml(t.name)} (${e.dur} ngày)</span>`;}
     attachTip(bar,t,e);canvas.appendChild(bar);pos[t.id]={y:y+15,sx:x,ex:x+w};});
 
@@ -662,14 +691,14 @@ function startDrag(ev,t,mode){
   if(isSummary(t))return; ev.preventDefault();
   drag={t,mode,startX:ev.clientX,origStart:t.start,origDur:t.dur};
   $("#tip").style.display="none"; document.body.style.cursor=mode==="move"?"move":"ew-resize";
-  window.addEventListener("mousemove",onDrag);window.addEventListener("mouseup",endDrag);
+  window.addEventListener("pointermove",onDrag);window.addEventListener("pointerup",endDrag);window.addEventListener("pointercancel",endDrag);
 }
 function onDrag(ev){if(!drag)return;const dd=Math.round((ev.clientX-drag.startX)/dayW);const t=drag.t;
   if(drag.mode==="move")t.start=addDays(drag.origStart,dd);
   else if(drag.mode==="resizeR")t.dur=Math.max(1,drag.origDur+dd);
   else if(drag.mode==="resizeL"){const nd=Math.max(1,drag.origDur-dd);t.start=addDays(drag.origStart,drag.origDur-nd);t.dur=nd;}
   scheduleDeps();renderTimeline();renderGrid();updateStatus();}
-function endDrag(){if(!drag)return;drag=null;document.body.style.cursor="";window.removeEventListener("mousemove",onDrag);window.removeEventListener("mouseup",endDrag);save();}
+function endDrag(){if(!drag)return;drag=null;document.body.style.cursor="";window.removeEventListener("pointermove",onDrag);window.removeEventListener("pointerup",endDrag);window.removeEventListener("pointercancel",endDrag);save();}
 
 /* chọn dòng */
 function selectRow(id,ev){const vis=visibleOrder();
@@ -815,7 +844,7 @@ function activateProject(id){
   upgradeColumns(); tasks.forEach(t=>{if(!t.custom)t.custom={};});
   selected=new Set(); lastSel=null; filter={active:false,from:null,to:null};
   if($("#fFrom"))$("#fFrom").value=""; if($("#fTo"))$("#fTo").value="";
-  $("#grid").style.width=gridWidth+"px";
+  applyGridWidth();
   document.querySelectorAll('#zoom button').forEach(b=>b.classList.toggle('active',b.dataset.z===zoom));
   $("#btnCrit").style.background=showCrit?"#dde6f5":"";
   updateProjectChip();
@@ -1180,17 +1209,26 @@ function clearFilter(){filter={active:false,from:null,to:null};$("#fFrom").value
 
 /* resize cột (kéo viền tiêu đề) */
 let colDrag=null;
-document.addEventListener("mousedown",e=>{if(e.target.classList.contains("col-resize")){
+document.addEventListener("pointerdown",e=>{if(e.target.classList.contains("col-resize")){
   const key=e.target.dataset.key;const c=columns.find(x=>x.key===key);colDrag={c,x:e.clientX,w:c.width};e.preventDefault();}});
-document.addEventListener("mousemove",e=>{if(colDrag){colDrag.c.width=Math.max(40,colDrag.w+(e.clientX-colDrag.x));updateColLayout();}});
-document.addEventListener("mouseup",()=>{if(colDrag){colDrag=null;save();}});
+document.addEventListener("pointermove",e=>{if(colDrag){colDrag.c.width=Math.max(40,colDrag.w+(e.clientX-colDrag.x));updateColLayout();}});
+document.addEventListener("pointerup",()=>{if(colDrag){colDrag=null;save();}});
 
-/* splitter kéo rộng bảng */
+/* splitter kéo rộng bảng (chuột + cảm ứng) */
 let splitDrag=false;
-$("#splitter").addEventListener("mousedown",e=>{splitDrag=true;e.preventDefault();document.body.style.cursor="col-resize";});
-document.addEventListener("mousemove",e=>{if(splitDrag){const left=$("#main").getBoundingClientRect().left;
-  gridWidth=Math.max(200,Math.min(e.clientX-left,innerWidth-260));$("#grid").style.width=gridWidth+"px";}});
-document.addEventListener("mouseup",()=>{if(splitDrag){splitDrag=false;document.body.style.cursor="";save();}});
+function isMobile(){return innerWidth<820;}
+function applyGridWidth(){               // trên điện thoại tự thu hẹp bảng cho vừa màn hình
+  let w=gridWidth;
+  if(isMobile())w=Math.max(110,Math.min(gridWidth,Math.round(innerWidth*0.52)));
+  $("#grid").style.width=w+"px";
+}
+$("#splitter").addEventListener("pointerdown",e=>{splitDrag=true;e.preventDefault();document.body.style.cursor="col-resize";});
+document.addEventListener("pointermove",e=>{if(splitDrag){const left=$("#main").getBoundingClientRect().left;
+  const minW=isMobile()?90:200, minR=isMobile()?80:260;
+  gridWidth=Math.max(minW,Math.min(e.clientX-left,innerWidth-minR));$("#grid").style.width=gridWidth+"px";}});
+document.addEventListener("pointerup",()=>{if(splitDrag){splitDrag=false;document.body.style.cursor="";save();}});
+document.addEventListener("pointercancel",()=>{if(splitDrag){splitDrag=false;document.body.style.cursor="";save();}});
+addEventListener("resize",()=>{applyGridWidth();});
 
 /* ==================== KHỞI ĐỘNG + SỰ KIỆN UI ==================== */
 /* 1) Dựng app NGAY (luôn hiển thị + bấm được) trước khi gắn sự kiện */
