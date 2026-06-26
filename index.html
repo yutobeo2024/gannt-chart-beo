@@ -240,6 +240,10 @@
       <button class="tbtn danger" id="btnDel" title="Xóa (Delete)"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/></svg>Xóa</button>
     </div>
     <div class="tb-group">
+      <button class="tbtn" id="btnUndo" title="Hoàn tác (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4l4-4"/><path d="M5 10h11a4 4 0 1 1 0 8h-1"/></svg>Hoàn tác</button>
+      <button class="tbtn" id="btnRedo" title="Làm lại (Ctrl+Y)"><svg viewBox="0 0 24 24"><path d="M15 14l4-4l-4-4"/><path d="M19 10H8a4 4 0 1 0 0 8h1"/></svg></button>
+    </div>
+    <div class="tb-group">
       <button class="tbtn" id="btnIndent" title="Thụt vào — tạo việc con (Tab)"><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/><line x1="4" y1="4" x2="4" y2="20"/></svg>Thụt</button>
       <button class="tbtn" id="btnOutdent" title="Lùi ra (Shift+Tab)"><svg viewBox="0 0 24 24"><polyline points="15 6 9 12 15 18"/><line x1="20" y1="4" x2="20" y2="20"/></svg>Lùi</button>
       <button class="tbtn" id="btnUp" title="Lên (Alt+↑)"><svg viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></button>
@@ -768,6 +772,35 @@ function save(){
   syncActiveToDB();
   try{localStorage.setItem("projectflow_v3",JSON.stringify(DB));}catch(e){}   // luôn lưu tạm ở máy
   if(cloud.enabled)scheduleCloudPush();
+  histPush();
+}
+
+/* ===== HOÀN TÁC / LÀM LẠI (undo/redo) — chụp trạng thái dữ liệu sau mỗi thao tác ===== */
+let history=[], histIndex=-1, histLock=false;
+function histSnap(){return JSON.stringify({tasks,nextId,columns});}
+function histReset(){history=[histSnap()];histIndex=0;updateUndoButtons();}
+function histPush(){
+  if(histLock)return;
+  const snap=histSnap();
+  if(history[histIndex]===snap)return;            // không đổi dữ liệu (vd: chỉ đổi zoom) -> bỏ qua
+  history=history.slice(0,histIndex+1);            // bỏ phần "làm lại" cũ
+  history.push(snap); histIndex++;
+  if(history.length>80){history.shift();histIndex--;}
+  updateUndoButtons();
+}
+function histApply(){
+  histLock=true;
+  const d=JSON.parse(history[histIndex]); tasks=d.tasks; nextId=d.nextId; columns=d.columns;
+  selected=new Set(); lastSel=null;
+  scheduleDeps(); render(); save();               // lưu + đồng bộ, nhưng không tạo lịch sử mới
+  histLock=false; updateUndoButtons();
+}
+function undo(){if(histIndex>0){histIndex--;histApply();}}
+function redo(){if(histIndex<history.length-1){histIndex++;histApply();}}
+function updateUndoButtons(){
+  const u=$("#btnUndo"),r=$("#btnRedo");
+  if(u){u.disabled=histIndex<=0;u.style.opacity=u.disabled?0.4:1;}
+  if(r){r.disabled=histIndex>=history.length-1;r.style.opacity=r.disabled?0.4:1;}
 }
 function scheduleCloudPush(){
   clearTimeout(cloud.timer);
@@ -848,6 +881,7 @@ function activateProject(id){
   document.querySelectorAll('#zoom button').forEach(b=>b.classList.toggle('active',b.dataset.z===zoom));
   $("#btnCrit").style.background=showCrit?"#dde6f5":"";
   updateProjectChip();
+  histReset();   // mỗi khi mở/nạp dự án -> lịch sử hoàn tác bắt đầu lại
 }
 function updateProjectChip(){const p=DB.projects.find(x=>x.id===DB.activeId);if(p)$("#projName").textContent=p.name;}
 
@@ -1239,6 +1273,8 @@ try{
 $("#btnAdd").onclick=()=>addTask(false);
 $("#btnMilestone").onclick=()=>addTask(true);
 $("#btnDel").onclick=delTask;
+$("#btnUndo").onclick=undo;
+$("#btnRedo").onclick=redo;
 $("#btnIndent").onclick=indent;
 $("#btnOutdent").onclick=outdent;
 $("#btnUp").onclick=()=>moveRow(-1);
@@ -1291,7 +1327,9 @@ document.addEventListener("keydown",e=>{
   if($("#peopleModal").classList.contains("show")){if(e.key==="Escape")closePeopleModal();return;}
   if($("#projectModal").classList.contains("show")){if(e.key==="Escape")closeProjectModal();return;}
   if($("#modalBg").classList.contains("show")){if(e.key==="Escape")closeColModal();return;}
-  if(e.key==="Insert"){e.preventDefault();addTask(false);}
+  if((e.ctrlKey||e.metaKey)&&(e.key==="z"||e.key==="Z")&&!e.shiftKey){e.preventDefault();undo();}
+  else if((e.ctrlKey||e.metaKey)&&((e.key==="y"||e.key==="Y")||((e.key==="z"||e.key==="Z")&&e.shiftKey))){e.preventDefault();redo();}
+  else if(e.key==="Insert"){e.preventDefault();addTask(false);}
   else if(e.key==="Delete"){e.preventDefault();delTask();}
   else if(e.key==="Tab"&&!e.shiftKey){e.preventDefault();indent();}
   else if(e.key==="Tab"&&e.shiftKey){e.preventDefault();outdent();}
